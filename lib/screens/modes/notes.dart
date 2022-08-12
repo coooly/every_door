@@ -53,7 +53,9 @@ class _NotesPaneState extends ConsumerState<NotesPane> {
 
   onMapEvent(MapEvent event) {
     bool fromController = event.source == MapEventSource.mapController;
-    if (event is MapEventMoveEnd && !fromController) {
+    if (event is MapEventWithMove && !fromController) {
+      ref.read(zoomProvider.state).state = event.zoom;
+    } else if (event is MapEventMoveEnd && !fromController) {
       // Move the effective location for downloading to work properly.
       ref.read(trackingProvider.state).state = false;
       ref.read(effectiveLocationProvider.notifier).set(event.center);
@@ -111,6 +113,20 @@ class _NotesPaneState extends ConsumerState<NotesPane> {
     final loc = AppLocalizations.of(context)!;
     EdgeInsets safePadding = MediaQuery.of(context).padding;
 
+    // Rotate the map according to the global rotation value.
+    ref.listen(rotationProvider, (_, double newValue) {
+      if ((newValue - controller.rotation).abs() >= 1.0)
+        controller.rotate(newValue);
+    });
+
+    // Update zoom.
+    ref.listen(zoomProvider, (_, double newValue) {
+      if ((newValue - controller.zoom).abs() >= 0.1) {
+        controller.move(controller.center, newValue);
+      }
+    });
+
+    // Update location.
     ref.listen(effectiveLocationProvider, (_, LatLng next) {
       controller.move(next, controller.zoom);
       updateNotes();
@@ -131,7 +147,7 @@ class _NotesPaneState extends ConsumerState<NotesPane> {
                   center: ref.read(effectiveLocationProvider),
                   minZoom: 15.0,
                   maxZoom: 20.0,
-                  zoom: 17.0,
+                  zoom: ref.watch(zoomProvider) - 1.0,
                   // TODO: remove drag when adding map drawing
                   interactiveFlags: InteractiveFlag.pinchMove |
                       InteractiveFlag.pinchZoom |

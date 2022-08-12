@@ -65,10 +65,11 @@ class _EntrancesPaneState extends ConsumerState<EntrancesPane> {
 
   onMapEvent(MapEvent event) {
     bool fromController = event.source == MapEventSource.mapController;
-    if (event is MapEventMove) {
+    if (event is MapEventWithMove) {
       center = event.center;
       if (!fromController) {
         ref.read(trackingProvider.state).state = false;
+        ref.read(zoomProvider.state).state = event.zoom;
         setState(() {
           // redraw center marker
         });
@@ -329,6 +330,13 @@ class _EntrancesPaneState extends ConsumerState<EntrancesPane> {
         controller.rotate(newValue);
     });
 
+    // Update zoom.
+    ref.listen(zoomProvider, (_, double newValue) {
+      if ((newValue - controller.zoom).abs() >= 0.1) {
+        controller.move(controller.center, newValue);
+      }
+    });
+
     // When turning the tracking on, move the map immediately.
     ref.listen(trackingProvider, (_, bool newState) {
       if (trackLocation != null && newState) {
@@ -361,7 +369,7 @@ class _EntrancesPaneState extends ConsumerState<EntrancesPane> {
               mapController: controller,
               options: MapOptions(
                 center: center,
-                zoom: 18.0,
+                zoom: ref.watch(zoomProvider),
                 minZoom: 16.0,
                 maxZoom: 20.0,
                 rotation: ref.watch(rotationProvider),

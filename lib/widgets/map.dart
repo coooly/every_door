@@ -9,6 +9,7 @@ import 'package:every_door/providers/geolocation.dart';
 import 'package:every_door/providers/imagery.dart';
 import 'package:every_door/providers/editor_mode.dart';
 import 'package:every_door/providers/legend.dart';
+import 'package:every_door/providers/location.dart';
 import 'package:every_door/providers/poi_filter.dart';
 import 'package:every_door/screens/settings.dart';
 import 'package:every_door/widgets/loc_marker.dart';
@@ -103,10 +104,11 @@ class _AmenityMapState extends ConsumerState<AmenityMap> {
   }
 
   void onMapEvent(MapEvent event) {
-    if (event is MapEventMove) {
+    if (event is MapEventWithMove) {
       mapCenter = event.targetCenter;
       if (event.source != MapEventSource.mapController) {
         ref.read(trackingProvider.state).state = false;
+        ref.read(zoomProvider.state).state = event.zoom;
         setState(() {
           // redraw center marker
         });
@@ -209,8 +211,10 @@ class _AmenityMapState extends ConsumerState<AmenityMap> {
     if (zoom < kMapZoom - 1)
       zoom = min(curZoom, kMapZoom - 1);
     else if (zoom > maxZoomHere) zoom = max(curZoom, maxZoomHere);
-    if ((zoom - curZoom).abs() >= kZoomThreshold)
+    if ((zoom - curZoom).abs() >= kZoomThreshold) {
       mapController.move(mapController.center, zoom);
+      ref.read(zoomProvider.state).state = zoom;
+    }
   }
 
   @override
@@ -253,6 +257,14 @@ class _AmenityMapState extends ConsumerState<AmenityMap> {
       }
     });
 
+    // Update zoom.
+    ref.listen(zoomProvider, (_, double newValue) {
+      if ((newValue - mapController.zoom).abs() >= 0.1) {
+        final newZoom = newValue + (widget.colorsFromLegend ? 1 : 0);
+        mapController.move(mapController.center, newZoom);
+      }
+    });
+
     // For micromapping, zoom in and out.
     ref.listen<LatLngBounds?>(microZoomedInProvider,
         (_, LatLngBounds? newState) {
@@ -289,7 +301,8 @@ class _AmenityMapState extends ConsumerState<AmenityMap> {
         center: widget.initialLocation, // This does not work :(
         rotation: ref.watch(rotationProvider),
         rotationThreshold: kRotationThreshold,
-        zoom: kMapZoom,
+        // colorsFromLegend is an indirect way to know it's micromapping mode.
+        zoom: ref.watch(zoomProvider) + (widget.colorsFromLegend ? 1 : 0),
         minZoom: 15.0,
         maxZoom: 20.0,
         interactiveFlags: ref.watch(microZoomedInProvider) != null
